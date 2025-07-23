@@ -135,7 +135,7 @@ export const documentsRouter = createRouter({
         .set({
           ...(input.signedDocumentUrl && { signedDocumentUrl: input.signedDocumentUrl }),
           ...(input.signature && { 
-            richTextContent: document.documents.richTextContent || `Signed by: ${input.signature}` 
+            richTextContent: `Signed by: ${input.signature}` 
           }),
         })
         .where(eq(documents.id, input.id));

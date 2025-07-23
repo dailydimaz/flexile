@@ -21,6 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useCurrentCompany } from "@/global";
 import { DocumentTemplateType, trpc } from "@/trpc/client";
+import PdfOcrUpload from "@/app/(dashboard)/documents/PdfOcrUpload";
 
 interface InviteLinkModalProps {
   open: boolean;
@@ -71,6 +72,19 @@ const InviteLinkModal = ({ open, onOpenChange }: InviteLinkModalProps) => {
   });
   const resetInviteLink = () => {
     void resetInviteLinkMutation.mutateAsync(queryParams);
+  };
+
+  const handlePdfTextExtracted = (result: {
+    text: string;
+    isSignedDocument: boolean;
+    confidence: number;
+    filename: string;
+  }) => {
+    form.setValue("richTextContent", result.text);
+    form.setValue("contractSignedElsewhere", result.isSignedDocument);
+    if (result.isSignedDocument) {
+      form.setValue("signedDocumentUrl", `Extracted from: ${result.filename}`);
+    }
   };
 
   return (
@@ -165,6 +179,16 @@ const InviteLinkModal = ({ open, onOpenChange }: InviteLinkModalProps) => {
                           </FormItem>
                         )}
                       />
+                      
+                      <div className="mt-4">
+                        <FormLabel>Or upload PDF to extract text</FormLabel>
+                        <div className="mt-2">
+                          <PdfOcrUpload 
+                            onTextExtracted={handlePdfTextExtracted}
+                            disabled={false}
+                          />
+                        </div>
+                      </div>
                     </>
                   )}
                 </>

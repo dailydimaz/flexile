@@ -24,6 +24,7 @@ import { quickbooksRouter } from "./routes/quickbooks";
 import { shareHoldingsRouter } from "./routes/shareHoldings";
 import { tenderOffersRouter } from "./routes/tenderOffers";
 import { usersRouter } from "./routes/users";
+import { pdfOcrRouter } from "./routes/pdfOcr";
 import { createClient } from "./shared";
 import { createCallerFactory, createRouter } from "./";
 
@@ -49,6 +50,7 @@ export const appRouter = createRouter({
 
   companies: companiesRouter,
   files: filesRouter,
+  pdfOcr: pdfOcrRouter,
   expenseCategories: expenseCategoriesRouter,
   investorEntities: investorEntitiesRouter,
   equityCalculations: equityCalculationsRouter,
