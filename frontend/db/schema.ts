@@ -532,8 +532,13 @@ export const documentTemplates = pgTable(
     name: varchar().notNull(),
     type: integer("document_type").$type<DocumentTemplateType>().notNull(),
     externalId: varchar("external_id").$default(nanoid).notNull(),
-    docusealId: bigint("docuseal_id", { mode: "bigint" }).notNull(),
+    // Remove docuseal dependency - make nullable for migration
+    docusealId: bigint("docuseal_id", { mode: "bigint" }),
     signable: boolean("signable").notNull().default(false),
+    // New fields for enhanced contract features
+    richTextContent: text("rich_text_content"),
+    signedDocumentUrl: varchar("signed_document_url"),
+    isSignedElsewhere: boolean("is_signed_elsewhere").notNull().default(false),
     createdAt: timestamp("created_at", { precision: 6, mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { precision: 6, mode: "date" })
       .notNull()
@@ -569,7 +574,12 @@ export const documents = pgTable(
     updatedAt: timestamp("updated_at", { precision: 6, mode: "date" })
       .$onUpdate(() => new Date())
       .notNull(),
+    // Make docuseal fields optional as we phase out dependency
     docusealSubmissionId: integer("docuseal_submission_id"),
+    // New fields for enhanced document features
+    signedDocumentUrl: varchar("signed_document_url"),
+    richTextContent: text("rich_text_content"),
+    isSignedElsewhere: boolean("is_signed_elsewhere").notNull().default(false),
   },
   (table) => [
     index("index_documents_on_company_id").using("btree", table.companyId.asc().nullsLast().op("int8_ops")),

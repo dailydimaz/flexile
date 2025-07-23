@@ -1,17 +1,13 @@
-import docuseal from "@docuseal/api";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, isNotNull, isNull, not, type SQLWrapper } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, not, or, type SQLWrapper } from "drizzle-orm";
 import { pick } from "lodash-es";
 import { z } from "zod";
 import { byExternalId, db } from "@/db";
 import { activeStorageAttachments, activeStorageBlobs, documents, documentSignatures, users } from "@/db/schema";
-import env from "@/env";
 import { companyProcedure, createRouter } from "@/trpc";
 import { simpleUser } from "@/trpc/routes/users";
 import { assertDefined } from "@/utils/assert";
 import { templatesRouter } from "./templates";
-
-docuseal.configure({ key: env.DOCUSEAL_TOKEN });
 
 const visibleDocuments = (companyId: bigint, userId: bigint | SQLWrapper | undefined) =>
   and(
@@ -27,7 +23,14 @@ export const documentsRouter = createRouter({
         throw new TRPCError({ code: "FORBIDDEN" });
 
       const signable = assertDefined(
-        and(isNotNull(documents.docusealSubmissionId), isNull(documentSignatures.signedAt)),
+        and(
+          or(
+            isNotNull(documents.richTextContent), 
+            isNotNull(documents.signedDocumentUrl),
+            eq(documents.isSignedElsewhere, true)
+          ), 
+          isNull(documentSignatures.signedAt)
+        ),
       );
       const where = and(
         visibleDocuments(ctx.company.id, input.userId ? byExternalId(users, input.userId) : undefined),
@@ -35,7 +38,7 @@ export const documentsRouter = createRouter({
       );
       const rows = await db
         .selectDistinctOn([documents.id], {
-          ...pick(documents, "id", "name", "createdAt", "docusealSubmissionId", "type"),
+          ...pick(documents, "id", "name", "createdAt", "type", "richTextContent", "signedDocumentUrl", "isSignedElsewhere"),
           attachment: pick(activeStorageBlobs, "key", "filename"),
         })
         .from(documents)
@@ -74,7 +77,7 @@ export const documentsRouter = createRouter({
     }),
   getUrl: companyProcedure.input(z.object({ id: z.bigint() })).query(async ({ ctx, input }) => {
     const [document] = await db
-      .select({ docusealSubmissionId: documents.docusealSubmissionId })
+      .select({ signedDocumentUrl: documents.signedDocumentUrl })
       .from(documents)
       .innerJoin(documentSignatures, eq(documents.id, documentSignatures.documentId))
       .where(
@@ -84,12 +87,18 @@ export const documentsRouter = createRouter({
         ),
       )
       .limit(1);
-    if (!document?.docusealSubmissionId) throw new TRPCError({ code: "NOT_FOUND" });
-    const submission = await docuseal.getSubmission(document.docusealSubmissionId);
-    return assertDefined(submission.documents[0]).url;
+    if (!document?.signedDocumentUrl) throw new TRPCError({ code: "NOT_FOUND" });
+    return document.signedDocumentUrl;
   }),
   // TODO set up a DocuSeal webhook instead
-  sign: companyProcedure.input(z.object({ id: z.bigint(), role: z.string() })).mutation(async ({ ctx, input }) => {
+  sign: companyProcedure
+    .input(z.object({ 
+      id: z.bigint(), 
+      role: z.string(), 
+      signature: z.string().optional(),
+      signedDocumentUrl: z.string().optional()
+    }))
+    .mutation(async ({ ctx, input }) => {
     if (input.role === "Company Representative" && !ctx.companyAdministrator && !ctx.companyLawyer)
       throw new TRPCError({ code: "FORBIDDEN" });
     const [document] = await db
@@ -107,6 +116,7 @@ export const documentsRouter = createRouter({
       .limit(1);
     if (!document) throw new TRPCError({ code: "NOT_FOUND" });
 
+    // Update signature record
     await db
       .update(documentSignatures)
       .set({ signedAt: new Date() })
@@ -117,6 +127,19 @@ export const documentsRouter = createRouter({
           eq(documentSignatures.title, input.role),
         ),
       );
+
+    // Update document with signature data if provided
+    if (input.signature || input.signedDocumentUrl) {
+      await db
+        .update(documents)
+        .set({
+          ...(input.signedDocumentUrl && { signedDocumentUrl: input.signedDocumentUrl }),
+          ...(input.signature && { 
+            richTextContent: document.documents.richTextContent || `Signed by: ${input.signature}` 
+          }),
+        })
+        .where(eq(documents.id, input.id));
+    }
 
     // Check if all signatures for this document have been signed
     const allSignatures = await db.select().from(documentSignatures).where(eq(documentSignatures.documentId, input.id));

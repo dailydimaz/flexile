@@ -19,7 +19,7 @@ import { useQueryState } from "nuqs";
 import React, { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import DocusealForm, { customCss } from "@/app/(dashboard)/documents/DocusealForm";
+import ContractForm from "@/app/(dashboard)/documents/ContractForm";
 import { FinishOnboarding } from "@/app/(dashboard)/documents/FinishOnboarding";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import DataTable, { createColumnHelper, filterValueSchema, useTable } from "@/components/DataTable";
@@ -42,7 +42,11 @@ import { assertDefined } from "@/utils/assert";
 import { formatDate } from "@/utils/time";
 
 type Document = RouterOutput["documents"]["list"][number];
-type SignableDocument = Document & { docusealSubmissionId: number };
+type SignableDocument = Document & { 
+  richTextContent?: string; 
+  signedDocumentUrl?: string; 
+  isSignedElsewhere?: boolean; 
+};
 
 const typeLabels = {
   [DocumentType.ConsultingContract]: "Agreement",
@@ -237,7 +241,7 @@ export default function DocumentsPage() {
   const [signDocumentParam] = useQueryState("sign");
   const [signDocumentId, setSignDocumentId] = useState<bigint | null>(null);
   const isSignable = (document: Document): document is SignableDocument =>
-    !!document.docusealSubmissionId &&
+    (!!document.richTextContent || !!document.signedDocumentUrl || document.isSignedElsewhere) &&
     document.signatories.some(
       (signatory) =>
         !signatory.signedAt &&
@@ -309,7 +313,7 @@ export default function DocumentsPage() {
                       Download
                     </Link>
                   </Button>
-                ) : document.docusealSubmissionId && document.signatories.every((signatory) => signatory.signedAt) ? (
+                ) : (document.richTextContent || document.signedDocumentUrl) && document.signatories.every((signatory) => signatory.signedAt) ? (
                   <Button variant="outline" size="small" onClick={() => setDownloadDocument(document.id)}>
                     <Download className="size-4" />
                     Download
@@ -444,10 +448,6 @@ const SignDocumentModal = ({ document, onClose }: { document: SignableDocument; 
   const company = useCurrentCompany();
   const [redirectUrl] = useQueryState("next");
   const router = useRouter();
-  const [{ slug, readonlyFields }] = trpc.documents.templates.getSubmitterSlug.useSuspenseQuery({
-    id: document.docusealSubmissionId,
-    companyId: company.id,
-  });
   const trpcUtils = trpc.useUtils();
   const queryClient = useQueryClient();
 
@@ -462,21 +462,27 @@ const SignDocumentModal = ({ document, onClose }: { document: SignableDocument; 
     },
   });
 
+  const handleSubmit = (data: { signature?: string; signedUrl?: string }) => {
+    signDocument.mutate({
+      companyId: company.id,
+      id: document.id,
+      role: document.signatories.find((signatory) => signatory.id === user.id)?.title ?? "Company Representative",
+      signature: data.signature,
+      signedDocumentUrl: data.signedUrl,
+    });
+  };
+
   return (
     <Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
-        <DocusealForm
-          src={`https://docuseal.com/s/${slug}`}
-          readonlyFields={readonlyFields}
-          customCss={customCss}
-          onComplete={() => {
-            signDocument.mutate({
-              companyId: company.id,
-              id: document.id,
-              role:
-                document.signatories.find((signatory) => signatory.id === user.id)?.title ?? "Company Representative",
-            });
-          }}
+        <DialogHeader>
+          <DialogTitle>Sign Document</DialogTitle>
+        </DialogHeader>
+        <ContractForm
+          richTextContent={document.richTextContent}
+          signedDocumentUrl={document.signedDocumentUrl}
+          isSignedElsewhere={document.isSignedElsewhere}
+          onSubmit={handleSubmit}
         />
       </DialogContent>
     </Dialog>

@@ -15,9 +15,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useCurrentCompany } from "@/global";
 import { DocumentTemplateType, trpc } from "@/trpc/client";
 
@@ -32,23 +33,30 @@ const InviteLinkModal = ({ open, onOpenChange }: InviteLinkModalProps) => {
 
   const form = useForm({
     defaultValues: {
+      contractRequired: false,
       contractSignedElsewhere: true,
       documentTemplateId: "",
+      signedDocumentUrl: "",
+      richTextContent: "",
     },
     resolver: zodResolver(
       z.object({
+        contractRequired: z.boolean(),
         contractSignedElsewhere: z.boolean(),
         documentTemplateId: z.string().nullable().optional(),
+        signedDocumentUrl: z.string().optional(),
+        richTextContent: z.string().optional(),
       }),
     ),
   });
 
   const documentTemplateId = form.watch("documentTemplateId");
+  const contractRequired = form.watch("contractRequired");
   const contractSignedElsewhere = form.watch("contractSignedElsewhere");
 
   const queryParams = {
     companyId: company.id,
-    documentTemplateId: !contractSignedElsewhere ? (documentTemplateId ?? null) : null,
+    documentTemplateId: contractRequired && !contractSignedElsewhere ? (documentTemplateId ?? null) : null,
   };
 
   const { data: invite, refetch } = trpc.companyInviteLinks.get.useQuery(queryParams, {
@@ -86,25 +94,80 @@ const InviteLinkModal = ({ open, onOpenChange }: InviteLinkModalProps) => {
             <Form {...form}>
               <FormField
                 control={form.control}
-                name="contractSignedElsewhere"
+                name="contractRequired"
                 render={({ field }) => (
                   <FormItem>
                     <FormControl>
                       <Switch
                         checked={field.value}
                         onCheckedChange={field.onChange}
-                        label={<span className="text-sm">Already signed contract elsewhere.</span>}
+                        label={<span className="text-sm">Contract required for invitation</span>}
                       />
                     </FormControl>
                   </FormItem>
                 )}
               />
-              {!form.watch("contractSignedElsewhere") && (
-                <FormField
-                  control={form.control}
-                  name="documentTemplateId"
-                  render={({ field }) => <TemplateSelector type={DocumentTemplateType.ConsultingContract} {...field} />}
-                />
+              
+              {contractRequired && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="contractSignedElsewhere"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            label={<span className="text-sm">Contract already signed elsewhere</span>}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  {contractSignedElsewhere ? (
+                    <FormField
+                      control={form.control}
+                      name="signedDocumentUrl"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Link to signed document</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="https://example.com/signed-contract.pdf"
+                              {...field}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  ) : (
+                    <>
+                      <FormField
+                        control={form.control}
+                        name="documentTemplateId"
+                        render={({ field }) => <TemplateSelector type={DocumentTemplateType.ConsultingContract} {...field} />}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="richTextContent"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Contract content (rich text)</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Paste contract text here for signature..."
+                                rows={6}
+                                {...field}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </>
+                  )}
+                </>
               )}
             </Form>
           </div>

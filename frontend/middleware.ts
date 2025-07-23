@@ -18,8 +18,8 @@ export default clerkMiddleware((_, req) => {
       NODE_ENV === "production" ? "" : `'unsafe-eval'` // required by Clerk, as is style-src 'unsafe-inline' and worker-src blob:.
     };
     style-src 'self' 'unsafe-inline';
-    connect-src 'self' ${clerkFapiUrl} https://docuseal.com ${s3Urls};
-    img-src 'self' blob: data: https://img.clerk.com https://docuseal.com https://docuseal.s3.amazonaws.com ${s3Urls};
+    connect-src 'self' ${clerkFapiUrl} ${s3Urls};
+    img-src 'self' blob: data: https://img.clerk.com ${s3Urls};
     worker-src 'self' blob:;
     font-src 'self';
     base-uri 'self';
